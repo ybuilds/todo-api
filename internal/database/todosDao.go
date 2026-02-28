@@ -3,6 +3,7 @@ package database
 import (
 	"database/sql"
 	"log"
+	"time"
 
 	"github.com/ybuilds/todo-api/internal/models"
 )
@@ -10,9 +11,9 @@ import (
 type TodoDao interface {
 	GetTodoById(id int64) (*models.Todo, error)
 	GetTodos() ([]models.Todo, error)
-	AddTodo() models.Todo
-	UpdateTodoById(id int64) models.Todo
-	DeleteTodoById(id int64)
+	AddTodo(todo models.Todo) (int64, error)
+	UpdateTodoById(id int64, todo models.Todo) (int64, error)
+	DeleteTodoById(id int64) (int64, error)
 }
 
 type todoDao struct {
@@ -63,14 +64,46 @@ func (dao *todoDao) GetTodoById(id int64) (*models.Todo, error) {
 	return &todo, nil
 }
 
-func (dao *todoDao) AddTodo() models.Todo {
-	return models.Todo{}
+func (dao *todoDao) AddTodo(todo models.Todo) (int64, error) {
+	var id int64
+
+	query := `INSERT INTO todos (name, description) VALUES ($1, $2) RETURNING id`
+
+	err := dao.db.QueryRow(query, todo.Name, todo.Desc).Scan(&id)
+	if err != nil {
+		log.Println("error inserting todo to db", err)
+		return -1, err
+	}
+
+	return id, nil
 }
 
-func (dao *todoDao) UpdateTodoById(id int64) models.Todo {
-	return models.Todo{}
+func (dao *todoDao) UpdateTodoById(id int64, todo models.Todo) (int64, error) {
+	todo.Updated = time.Now()
+
+	query := `UPDATE todos SET name=$2, description=$3, done=COALESCE($4, done), updated=$5 WHERE id=$1 RETURNING id`
+
+	var updId int64
+
+	err := dao.db.QueryRow(query, id, todo.Name, todo.Desc, todo.Done, todo.Updated).Scan(&updId)
+	if err != nil {
+		log.Println("error updating todo in db", err)
+		return -1, err
+	}
+
+	return updId, nil
 }
 
-func (dao *todoDao) DeleteTodoById(id int64) {
+func (dao *todoDao) DeleteTodoById(id int64) (int64, error) {
+	var delId int64
 
+	query := `DELETE FROM todos WHERE id=$1 RETURNING id`
+
+	err := dao.db.QueryRow(query, id).Scan(&delId)
+	if err != nil {
+		log.Println("error deleting todo from db", err)
+		return -1, err
+	}
+
+	return id, nil
 }
